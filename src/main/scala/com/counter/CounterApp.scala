@@ -2,6 +2,8 @@ package com.counter
 
 import akka.actor.typed.ActorSystem
 import akka.actor.typed.scaladsl.Behaviors
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.server.Route
 import com.counter.Counter.{
   ActionPerformed,
   ClearCounter,
@@ -12,34 +14,42 @@ import com.counter.Counter.{
   SetValue
 }
 
+import scala.util.{Failure, Success}
+
 object CounterApp extends {
 
+  def startHttpServer(routes: Route)(implicit system: ActorSystem[_]): Unit = {
+    // Akka HTTP still needs a classic ActorSystem to start
+    import system.executionContext
+
+    // Akka binds to some port and address on the local machine and waits for incoming requests
+    val futureBinding =
+      Http().newServerAt("localhost", port = 8080).bind(routes)
+    futureBinding.onComplete {
+      case Success(binding) =>
+        val address = binding.localAddress
+        system.log.info("Server online at http://{}:{}/",
+                        address.getHostString,
+                        address.getPort)
+      case Failure(ex) =>
+        system.log.error("Failed to bind HTTP endpoint, terminating system", ex)
+        system.terminate()
+    }
+  }
+
   def main(args: Array[String]): Unit = {
-    val guardianActor = Behaviors.setup[Counter.Command] { context =>
+    val guardianActor = Behaviors.setup[Nothing] { context =>
       // Spawn a counter actor as it's child
       val counterActor = context.spawn(Counter(), name = "CounterActor")
       // Subscribe to termination notifications for the spawned actor
       context.watch(counterActor)
-      // Send a few messages to our CounterActor
-      counterActor ! Increment(context.self)
-      counterActor ! SetValue(100)
-      counterActor ! GetCounter(context.self)
-      counterActor ! Decrement(context.self)
-      counterActor ! ClearCounter
-      counterActor ! GetCounter(context.self)
 
-      // This parent actor will need to keep an eye on messages sent by its child
-      Behaviors.receiveMessagePartial[Counter.Command] {
-        case GetCounterResponse(count) =>
-          context.log.info("The counter is at: " + count)
-          Behaviors.same
-        case ActionPerformed(description) =>
-          context.log.info(description)
-          Behaviors.same
-      }
+      val routes = new CounterRoutes(counterActor)(context.system)
+      startHttpServer(routes.counterRoutes)(context.system)
+
+      // The guardian's behavior is just to create and monitor the child actor it creates
+      Behaviors.empty
     }
-    val system = ActorSystem[Counter.Command](guardianActor, "CounterApp")
+    val system = ActorSystem[Nothing](guardianActor, "CounterApp")
   }
-
-  //The root actor only monitors it's CounterActor child and does not receive other messages
 }
