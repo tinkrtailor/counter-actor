@@ -8,13 +8,15 @@ object Counter {
   sealed trait Command
   final case class Increment(replyTo: ActorRef[ActionPerformed]) extends Command
   final case class Decrement(replyTo: ActorRef[ActionPerformed]) extends Command
-  final case class SetValue(value: Int) extends Command
-  final case object ClearCounter extends Command
+  final case class SetValue(value: Int, replyTo: ActorRef[ActionPerformed])
+      extends Command
+  final case class ClearCounter(replyTo: ActorRef[ActionPerformed])
+      extends Command
   final case class GetCounter(replyTo: ActorRef[GetCounterResponse])
       extends Command
 
   // The messages the actor can emit as replies:
-  final case class GetCounterResponse(maybeCount: Int) extends Command
+  final case class GetCounterResponse(count: Int) extends Command
   final case class ActionPerformed(description: String) extends Command
 
   // The function declaring how the actor responds to messages sent to him (his behavior)
@@ -29,8 +31,12 @@ object Counter {
       case Decrement(replyTo) =>
         replyTo ! ActionPerformed("Counter decremented by one")
         counter(count = count - 1)
-      case ClearCounter    => counter(0)
-      case SetValue(value) => counter(value)
+      case ClearCounter(replyTo) =>
+        replyTo ! ActionPerformed("Counter reset to zero")
+        counter(0)
+      case SetValue(value, replyTo) =>
+        replyTo ! ActionPerformed(s"Counter value set at $value")
+        counter(value)
     }
 
   // A counter actor is initialized with it's current state as zero
