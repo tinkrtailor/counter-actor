@@ -77,7 +77,7 @@ class CounterRoutes(counterActor: ActorRef[Counter.Command])(
         entity(as[UserCommand]) { userCmd =>
           onComplete(mapUserCommand(userCmd.message, maybeData = userCmd.data)) {
             case Failure(ex) =>
-              complete(StatusCodes.InternalServerError,
+              complete(StatusCodes.BadRequest,
                        s"An error occurred: ${ex.getMessage}")
             case Success(performed) => complete(performed)
           }

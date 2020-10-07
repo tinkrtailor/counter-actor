@@ -70,10 +70,9 @@ class CounterSpec
     "Set the counter state to the value in the message" in {
       val replyProbe = createTestProbe[Command]
       val testCounter = spawn(Counter())
-      testCounter ! SetValue(100)
 
-      testCounter ! GetCounter(replyProbe.ref)
-      replyProbe.expectMessage(GetCounterResponse(100))
+      testCounter ! SetValue(100, replyProbe.ref)
+      ActionPerformed(s"Counter value set at 100")
     }
   }
 
@@ -81,7 +80,8 @@ class CounterSpec
     "Set the counter state to zero" in {
       val replyProbe = createTestProbe[Command]
       val testCounter = spawn(Counter())
-      testCounter ! ClearCounter
+      testCounter ! ClearCounter(replyProbe.ref)
+      replyProbe.expectMessage(ActionPerformed("Counter reset to zero"))
 
       testCounter ! GetCounter(replyProbe.ref)
       replyProbe.expectMessage(GetCounterResponse(0))
