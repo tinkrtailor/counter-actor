@@ -24,6 +24,11 @@ class CounterRoutesSpec
   val counter = testKit.spawn(Counter())
   lazy val routes = new CounterRoutes(counter)(typedSystem).counterRoutes
 
+  override def afterAll(): Unit = {
+    testKit.shutdownTestKit()
+    super.afterAll()
+  }
+
   // use the json formats to marshal and unmarshall objects in the test
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
   import JsonFormats._

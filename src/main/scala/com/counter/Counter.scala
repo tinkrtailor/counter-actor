@@ -16,8 +16,8 @@ object Counter {
       extends Command
 
   // The messages the actor can emit as replies:
-  final case class GetCounterResponse(count: Int) extends Command
-  final case class ActionPerformed(description: String) extends Command
+  final case class GetCounterResponse(count: Int)
+  final case class ActionPerformed(description: String)
 
   // The function declaring how the actor responds to messages sent to him (his behavior)
   private def counter(count: Int): Behavior[Command] =
