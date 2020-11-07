@@ -5,13 +5,8 @@ import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Route
 import com.counter.Counter.{
-  ActionPerformed,
-  ClearCounter,
   Decrement,
-  GetCounter,
-  GetCounterResponse,
   Increment,
-  SetValue
 }
 
 import scala.util.{Failure, Success}
@@ -40,7 +35,8 @@ object CounterApp extends {
   def main(args: Array[String]): Unit = {
     val guardianActor = Behaviors.setup[Nothing] { context =>
       // Spawn a counter actor as it's child
-      val counterActor = context.spawn(Counter(), name = "CounterActor")
+      val counterActor =
+        context.spawn(Counter("counter!"), name = "CounterActor")
       // Subscribe to termination notifications for the spawned actor
       context.watch(counterActor)
 

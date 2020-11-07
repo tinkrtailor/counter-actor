@@ -1,91 +1,65 @@
 package com.counter
 
 import akka.actor.testkit.typed.scaladsl.ScalaTestWithActorTestKit
-import com.counter.Counter.{
-  ActionPerformed,
-  ClearCounter,
-  Command,
-  Decrement,
-  GetCounter,
-  GetCounterResponse,
-  Increment,
-  SetValue
-}
+import akka.pattern.StatusReply
+import akka.persistence.testkit.PersistenceTestKitPlugin
+import akka.persistence.testkit.scaladsl.PersistenceTestKit
+import akka.persistence.typed.PersistenceId
+import com.counter.Counter.{ Decrement, Decremented, Get, Increment, Incremented}
+import com.typesafe.config.ConfigFactory
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 
 class CounterSpec
-    extends ScalaTestWithActorTestKit
+    extends ScalaTestWithActorTestKit(
+      PersistenceTestKitPlugin.config.withFallback(
+        ConfigFactory.defaultApplication().resolve()))
     with Matchers
+    with BeforeAndAfterEach
     with AnyWordSpecLike {
-  "Sending a GetCounter message" should {
-    "Reply with an GetCounterResponse containing the state of the CounterActor" in {
-      val replyProbe = createTestProbe[Command]
-      val testCounter = spawn(Counter())
 
-      testCounter ! GetCounter(replyProbe.ref)
-      replyProbe.expectMessage(GetCounterResponse(0))
+  val persistenceTestKit = PersistenceTestKit(system)
+  lazy val counterId = "Counter1"
+  lazy val pid = PersistenceId("Counter", counterId)
+
+
+  "The Counter" should {
+    "Return the state when queried with a Get command" in {
+      val replyProbe = createTestProbe[Counter.State]()
+      val testCounter = spawn(Counter(counterId))
+      testCounter ! Get(replyProbe.ref)
+      replyProbe.expectMessage(Counter.State(0))
     }
-  }
-
-  "Sending an Increment message" should {
-    "Reply with a an ActionPerformed message with correct description" in {
-      val replyProbe = createTestProbe[Command]
-      val testCounter = spawn(Counter())
+    "Increment the counter and reply with a status message containing the updated state" in {
+      val replyProbe = createTestProbe[StatusReply[Counter.State]]()
+      val testCounter = spawn(Counter(counterId))
       testCounter ! Increment(replyProbe.ref)
-      replyProbe.expectMessage(ActionPerformed("Counter incremented by one"))
+      persistenceTestKit.expectNextPersisted(pid.id, Incremented)
+      replyProbe.expectMessage(StatusReply.Success(Counter.State(1)))
     }
 
-    "increment it's counter state to 1" in {
-      val replyProbe = createTestProbe[Command]
-      val testCounter = spawn(Counter())
-      testCounter ! Increment(replyProbe.ref)
-      replyProbe.expectMessage(ActionPerformed("Counter incremented by one"))
-
-      testCounter ! GetCounter(replyProbe.ref)
-      replyProbe.expectMessage(GetCounterResponse(1))
-    }
-  }
-
-  "Sending a Decrement message" should {
-    "Reply with a an ActionPerformed message with correct description" in {
-      val replyProbe = createTestProbe[Command]
-      val testCounter = spawn(Counter())
+    "Decrement the counter back to zero and reply with a status message containing the updated state" in {
+      val replyProbe = createTestProbe[StatusReply[Counter.State]]()
+      val testCounter = spawn(Counter(counterId))
       testCounter ! Decrement(replyProbe.ref)
-      replyProbe.expectMessage(ActionPerformed("Counter decremented by one"))
+      persistenceTestKit.expectNextPersisted(pid.id, Decremented)
+      replyProbe.expectMessage(StatusReply.Success(Counter.State(0)))
     }
+    "keep its state" in {
+      val testActor = testKit.spawn(Counter(counterId))
+      val probe = testKit.createTestProbe[StatusReply[Counter.State]]()
+      testActor ! Increment(probe.ref)
+      probe.expectMessage(StatusReply.Success(Counter.State(1)))
+      persistenceTestKit.expectNextPersisted(pid.id, Incremented)
+      testKit.stop(testActor)
 
-    "result negative counter when decrementing from initial state" in {
-      val replyProbe = createTestProbe[Command]
-      val testCounter = spawn(Counter())
-      testCounter ! Decrement(replyProbe.ref)
-      replyProbe.expectMessage(ActionPerformed("Counter decremented by one"))
-
-      testCounter ! GetCounter(replyProbe.ref)
-      replyProbe.expectMessage(GetCounterResponse(-1))
-    }
-  }
-
-  "Sending a SetValue message" should {
-    "Set the counter state to the value in the message" in {
-      val replyProbe = createTestProbe[Command]
-      val testCounter = spawn(Counter())
-
-      testCounter ! SetValue(100, replyProbe.ref)
-      ActionPerformed(s"Counter value set at 100")
+      // start again with same id
+      val restartedListing = testKit.spawn(Counter(counterId))
+      val stateProbe = testKit.createTestProbe[Counter.State]()
+      restartedListing ! Get(stateProbe.ref)
+      stateProbe.expectMessage(Counter.State(1))
+      persistenceTestKit.expectNothingPersisted(pid.id)
     }
   }
-
-  "Sending a ClearCounter message" should {
-    "Set the counter state to zero" in {
-      val replyProbe = createTestProbe[Command]
-      val testCounter = spawn(Counter())
-      testCounter ! ClearCounter(replyProbe.ref)
-      replyProbe.expectMessage(ActionPerformed("Counter reset to zero"))
-
-      testCounter ! GetCounter(replyProbe.ref)
-      replyProbe.expectMessage(GetCounterResponse(0))
-    }
-  }
-
 }
